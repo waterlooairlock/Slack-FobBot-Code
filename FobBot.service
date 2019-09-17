@@ -1,0 +1,14 @@
+[Unit]
+Description= Fob Bot Service to Run Slack Bot API for WatLock Team
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u SlackBotCode.py
+WorkingDirectory=/home/pi/Documents/Fob_Server_Code
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
