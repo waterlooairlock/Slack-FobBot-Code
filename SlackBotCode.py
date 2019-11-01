@@ -10,6 +10,10 @@ import gspread
 import slack
 from oauth2client.service_account import ServiceAccountCredentials
 
+
+# #############################################################################
+# ############################### INTIALIZATION ###############################
+
 #Error Logging Tracking
 logging.basicConfig(filename="RunLog.log", level=logging.DEBUG)
 logging.debug("PROGRAM START: Time: " + str(time.localtime()))
@@ -46,10 +50,15 @@ slack_token = os.environ['SLACK_BOT_TOKEN']
 rtm_client = slack.RTMClient(token=slack_token)
 web_client = slack.WebClient(token=slack_token)
 
+# ############################### INTIALIZATION ###############################
+# #############################################################################
+
+
 
 # #############################################################################
 # #########################__FUNCTION_DEFINITIONS__############################
 
+# Transfer fob from person to person
 def take_and_give(take_user_id, give_user_id):
 
     global message_list
@@ -112,14 +121,14 @@ cannot be Taken!")
 
 # ------------------------------------------------------------------------------
 
-
+# Borrow Fob from @ROOM 
 def borrow_fob(user_id):
 
     global message_list
     
-    if int(list_of_values[1][fob_count_index]) > 0:
-        list_of_values[1][fob_count_index] = int(list_of_values[1][fob_count_index]) - 1
-        sheet.update_cell(2, fob_count_index + 1, list_of_values[1][fob_count_index])
+    if int(list_of_values[1][fob_count_index]) > 0:                                                                     # If the room has fobs available,
+        list_of_values[1][fob_count_index] = int(list_of_values[1][fob_count_index]) - 1                                # Remove one from the Rooms count
+        sheet.update_cell(2, fob_count_index + 1, list_of_values[1][fob_count_index])                                   # and update the Google Sheet
 
 
         for i in range(list_of_values.__len__()):
@@ -157,7 +166,7 @@ def borrow_fob(user_id):
 
 # ------------------------------------------------------------------------------
 
-
+# Function for returning a fob to @ROOM
 def replace_fob(user_id):
 
     global message_list
@@ -166,7 +175,6 @@ def replace_fob(user_id):
     for i in range(list_of_values.__len__()):
         if i != 0:
             sublist = list_of_values[i]
-            # print(sublist)
             if sublist[id_index] == user_id and int(sublist[fob_count_index]) > 0:
                 list_of_values[1][fob_count_index] = int(list_of_values[1][fob_count_index]) + 1
                 sheet.update_cell(2, fob_count_index + 1, list_of_values[1][fob_count_index])
@@ -205,7 +213,7 @@ def replace_fob(user_id):
 
 # ------------------------------------------------------------------------------
 
-
+# Function to Add a fob to a member (not publicly advertised as it isnt needed under normal use)
 def add_fob(user_id):
 
     global message_list
@@ -236,7 +244,7 @@ def add_fob(user_id):
 
 # ------------------------------------------------------------------------------
 
-
+# Function to Remove a fob to a member (not publicly advertised as it isnt needed under normal use)
 def remove_fob(user_id):
 
     global message_list
@@ -245,7 +253,6 @@ def remove_fob(user_id):
     for i in range(list_of_values.__len__()):
         if i != 0:
             sublist = list_of_values[i]
-            # print(sublist)
             if sublist[id_index] == user_id and int(sublist[fob_count_index]) > 0:
                 sublist[fob_count_index] = int(sublist[fob_count_index]) - 1
                 sheet.update_cell(i + 1, 2, sublist[fob_count_index])
@@ -274,7 +281,7 @@ def remove_fob(user_id):
 
 # -----------------------------------------------------------------------------
 
-
+# Function for checking where the fobs are, so that we can keep track of them
 def check_fobs():
     
     global message_list
@@ -295,7 +302,7 @@ def check_fobs():
 
 # -----------------------------------------------------------------------------
 
-
+# Copy the data from the fob list (which should be up to date with the Google Sheet) into a CSV format text file in the root folder
 def copy_to_file():
     
     global list_of_values
@@ -313,7 +320,7 @@ def copy_to_file():
 
 # -----------------------------------------------------------------------------
 
-
+# Pull the names and emails of all the users in the Slack Workspace, and create a new Sheet in a Google-Sheets workbook (also replies with the link to the sheet)
 def update_email_list():
 
     user_list = requests.get("https://slack.com/api/users.list?token=%s" % slack_token).json()['members']
@@ -332,7 +339,6 @@ def update_email_list():
     print(cell_list)
 
     corrector_val = 0
-
     for i in range(1, users_num):
         if user_list[i]['deleted'] is False and 'email' in user_list[i]['profile']:
             cell_list[2 * (i - corrector_val)].value = user_list[i]['real_name']
@@ -342,12 +348,18 @@ def update_email_list():
 
     email_sheet.update_cells(cell_list)
 
+# #########################__FUNCTION_DEFINITIONS__############################
+# #############################################################################
+
+
 
 # #############################################################################
 # #########################__MAIN_PROGRAM_START__##############################
 
+@slack.RTMClient.run_on(event='message')            # Event Based Trigger
+def refresh_web_client():
+    web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection (TESTING to remove crash issues)
 
-# Triggered Function
 @slack.RTMClient.run_on(event='message')            # Event Based Trigger
 def mother_ship(**payload):
     
@@ -370,7 +382,7 @@ def mother_ship(**payload):
     replace = 0
     _help = 0 
 
-    web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection
+    #web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection (TESTING to remove crash issues)
 
     # -----------------------------------------------------
     # Get & Convert Message Data
@@ -399,28 +411,34 @@ def mother_ship(**payload):
     # -----------------------------------------------------
     # Parse Message actions and ID's
 
-    if re.match(r'.*(update).*', message_text, re.IGNORECASE) and re.match(r'.*(email).*', message_text, re.IGNORECASE):
+    if re.match(r'.*(update).*', message_text, re.IGNORECASE) and re.match(r'.*(email).*', message_text, re.IGNORECASE):        # Update the Email list and reply with the link to the email list
         update_email_list()
         web_client = payload['web_client']
         web_client.chat_postMessage(channel=message['channel'], text=f"*Fob-Bot* :robot_face:\n\nEmail List Updated in \
             Google Sheet:\n {email_workbook_url}")
         return
-    if re.match(r'.*(help|hi|hello).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(help|hi|hello).*', message_text, re.IGNORECASE):                       # Greeting and explaination reply
         _help = 1
-    if re.match(r'.*(check|who).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(check|who).*', message_text, re.IGNORECASE):                           # Check where the fobs are
         check = 1
-    if re.match(r'.*(add).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(add).*', message_text, re.IGNORECASE):                                 # Add a fob to a user
         add = 1
         message_give_id = message_text[message_text.find('@') + 1:message_text.find('>')]
-        # print(message_give_id)
-    if re.match(r'.*(remove).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(remove).*', message_text, re.IGNORECASE):                              # Remove a fob from a user
         remove = 1
         message_take_id = message_text[message_text.find('@') + 1:message_text.find('>')]
-    if re.match(r'.*(borrow|take).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(borrow|take).*', message_text, re.IGNORECASE):                         # Borrow a fob from @ROOM
         borrow = 1
-    if re.match(r'.*(return|replace).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(return|replace).*', message_text, re.IGNORECASE):                      # Return a fob to @ROOM
         replace = 1
-    if re.match(r'.*(transfer|give|hand).*', message_text, re.IGNORECASE):
+
+    if re.match(r'.*(transfer|give|hand).*', message_text, re.IGNORECASE):                  # Transfer a fob from person to person
         transfer = 1
         if 'from' in message_text:
             from_text = message_text[message_text.find('from') + 5:]
@@ -449,7 +467,7 @@ def mother_ship(**payload):
     # -----------------------------------------------------
     # Run Functions
 
-    if check + transfer + add + remove + borrow + replace > 1:
+    if check + transfer + add + remove + borrow + replace > 1:                          # Ensure that only 1 command is issued per message, otherwise issues will insue
         message_list.append("Sorry, I can only understand 1 command at a time. \nPlease send each command individually \
 and wait for my reply. \n Thanks!")
     
@@ -478,18 +496,28 @@ and wait for my reply. \n Thanks!")
 
     elif _help == 1:
         message_list.append(
-            f'Hello! <@{sender_id.upper()}> Im Fob-Bot! \nIm here to help the WatLock team keep track of those pesky \
-security fobs. \n\nTo *BORROW* a Fob from the WatLock room, send "Borrow Fob". \n\nTo *RETURN* a Fob, \
-send "Return Fob" \n\nIf you want to *CHECK* who has fobs, just DM me "Who has fobs" or "Check fobs"\
-\n\nIf you want to *TRANSFER* a fob between people, just DM me "Transfer fob from @Giver to @Receiver" \
-or "Transfer from me to @Receiver". \n(Please @ people or use "Me" for proper user recognition). \
-\n\nPlease do tell me when a Fob changes hands so I can inform everyone else on the team. \nThanks! :smile:')
+            f'Hello! <@{sender_id.upper()}> Im Fob-Bot! \n\
+                                            Im here to help the WatLock team keep track of those pesky security fobs. \n\
+                                            \n\
+                                            To *BORROW* a Fob from the WatLock room, send "Borrow Fob". \n\
+                                            \n\
+                                            To *RETURN* a Fob, send "Return Fob" \n\
+                                            \n\
+                                            If you want to *CHECK* who has fobs, just DM me "Who has fobs" or "Check fobs"\n\
+                                            \n\
+                                            If you want to *TRANSFER* a fob between people, just DM me "Transfer fob from @Giver to @Receiver" or "Transfer from me to @Receiver". \n\
+                                            (Please @ people or use "Me" for proper user recognition).\n\
+                                            \n\
+                                            Please do tell me when a Fob changes hands so I can inform everyone else on the team. \nThanks! :smile:\
+                                          ')
 
     else:
-        message_list.append(
-            ':question:\nSorry, I don\'t understand. Please use Keywords *"Borrow"*, *"Return*", *"Check"*, or *"Transfer"* in your command \
-messages.\n *Reference* people using @user. \n\nOr, send "Help" for more information about me and my \
-commands.\n')
+        message_list.append               (':question:\n\
+                                            Sorry, I don\'t understand. Please use Keywords *"Borrow"*, *"Return*", *"Check"*, or *"Transfer"* in your command messages.\n\
+                                            *Reference* people using @user. \n\
+                                            \n\
+                                            Or, send "Help" for more information about me and my commands.\n\
+                                          ')
          
     for i in range(message_list.__len__()):
         if i != 0:
@@ -498,7 +526,7 @@ commands.\n')
             send_message = message_list[i]
 
     send_message = "*Fob-Bot* :robot_face:\n\n" + send_message
-    #web_client = payload['web_client']
+    web_client = payload['web_client']
     web_client.chat_postMessage(channel=message['channel'], text=send_message)
     print("Return Message:\n" + send_message)
     copy_to_file()
@@ -521,11 +549,19 @@ commands.\n')
 # #########################__MAIN_PROGRAM_END__################################
 # #############################################################################
 
-#Update Local Fob List
+
+
+# #############################################################################
+# ##################__POST_FUNCTIONS_INITIALIZATION__##########################
+
+#Update Local Fob List (update the local Fob List file)
 list_of_values = sheet.get_all_values()
 copy_to_file()
 
 
-# Start Client Reading Messages
+# Start Client Watching for Messages
 rtm_client.auto_reconnect = True
 rtm_client.start()
+
+# ##################__POST_FUNCTIONS_INITIALIZATION__##########################
+# #############################################################################
