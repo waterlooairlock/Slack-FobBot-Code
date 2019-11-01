@@ -1,17 +1,24 @@
 import os
 import re
 import json
+import time
 import requests
+import logging
 from datetime import datetime
 
 import gspread
 import slack
 from oauth2client.service_account import ServiceAccountCredentials
 
+#Error Logging Tracking
+logging.basicConfig(filename="RunLog.log", level=logging.DEBUG)
+logging.debug("PROGRAM START: Time: " + str(time.localtime()))
+
 #Admin Update Settings
 admin_updates = True
-admin_name = 'Will'
+admin_name = 'REDACTED'
 admin_channel = 'REDACTED'
+admin_id = 'REDACTED'
 
 #Set all Global Variables
 id_index = 0
@@ -20,16 +27,24 @@ message_list = []
 list_of_values = []
 
 #Set Google Sheet for Fob Data
+client_credentials_file = "client_secret.json"
 scope = ['https://spreadsheets.google.com/feeds']
-credentials = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
-client = gspread.authorize(credentials)
-sheet = client.open_by_url(
-    "REDACTED").sheet1
+fob_workbook_url = "REDACTED"
 
-#Setuop Slack Client and Authorization
-os.environ['SLACK_BOT_TOKEN'] = 'REDACTED'
+credentials = ServiceAccountCredentials.from_json_keyfile_name(client_credentials_file, scope)
+client = gspread.authorize(credentials)
+sheet = client.open_by_url(fob_workbook_url).sheet1
+
+#Emails Sheet Setup
+email_workbook_url = "REDACTED"
+
+#Setup Slack Client and Authorization
+bot_token = "REDACTED"
+
+os.environ['SLACK_BOT_TOKEN'] = bot_token
 slack_token = os.environ['SLACK_BOT_TOKEN']
 rtm_client = slack.RTMClient(token=slack_token)
+web_client = slack.WebClient(token=slack_token)
 
 
 # #############################################################################
@@ -66,7 +81,7 @@ cannot be Taken!")
                 return
 
     if not removed:
-        sheet.append_row([take_user_id, 0])  # COMMENT BACK IN LATER
+        sheet.append_row([take_user_id, 0])
         list_of_values.append([take_user_id, 0])
         message_list.append(f":exclamation: \n<@{take_user_id.upper()}> does not have a Fob, one cannot be Taken!")
         copy_to_file()
@@ -78,7 +93,7 @@ cannot be Taken!")
                 if sublist[id_index] == give_user_id:
                     sublist[fob_count_index] = int(sublist[fob_count_index]) + 1
                     list_of_values[i] = sublist.copy()
-                    sheet.update_cell(i + 1, 2, sublist[fob_count_index])
+                    sheet.update_cell(i + 1, fob_count_index + 1, sublist[fob_count_index])
                     if sublist[fob_count_index] == 1:
                         message_list.append(f"<@{give_user_id.upper()}> now has 1 Fob!"
                                             + ':key:' * int(sublist[fob_count_index]))
@@ -89,11 +104,104 @@ cannot be Taken!")
                     return
                 
         if not added:
-            sheet.append_row([give_user_id, 1])  # COMMENT BACK IN LATER
+            sheet.append_row([give_user_id, 1])
             list_of_values.append([give_user_id, 1])
             message_list.append(f"<@{give_user_id.upper()}> now has 1 Fob! :key:!")
             copy_to_file()
             
+
+# ------------------------------------------------------------------------------
+
+
+def borrow_fob(user_id):
+
+    global message_list
+    
+    if int(list_of_values[1][fob_count_index]) > 0:
+        list_of_values[1][fob_count_index] = int(list_of_values[1][fob_count_index]) - 1
+        sheet.update_cell(2, fob_count_index + 1, list_of_values[1][fob_count_index])
+
+
+        for i in range(list_of_values.__len__()):
+            if i != 0:
+                sublist = list_of_values[i]
+                if sublist[id_index] == user_id:
+                    sublist[fob_count_index] = int(sublist[fob_count_index]) + 1
+                    list_of_values[i] = sublist.copy()
+                    sheet.update_cell(i + 1, fob_count_index + 1, sublist[fob_count_index])
+                    if sublist[fob_count_index] == 1:
+                        message_list.append(f"<@{user_id.upper()}> now has 1 Fob checked-out!"
+                                            + ':key:' * int(sublist[fob_count_index]) + "\n" +
+                                            f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                                            + ':key:' * int(list_of_values[1][fob_count_index]))
+                    else:
+                        message_list.append(f"<@{user_id.upper()}> now has {sublist[fob_count_index]} Fobs checked-out!"
+                                            + ':key:' * int(sublist[fob_count_index]) + "\n" +
+                                            f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                                            + ':key:' * int(list_of_values[1][fob_count_index]))
+                    copy_to_file()
+                    return
+        
+        
+        sheet.append_row([user_id, 1])
+        list_of_values.append([user_id, 1])
+        message_list.append(f"<@{user_id.upper()}> now has 1 Fob checked-out! :key:" + "\n" +
+                            f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                            + ':key:' * int(list_of_values[1][fob_count_index]))
+        copy_to_file()
+    
+    else:
+        message_list.append("The Room does not currently have any fobs available, so you cannot check one out! \n\n"+
+            " There may be an error in the Fob tracking, if this is the case, please contact an Exec!")
+
+
+# ------------------------------------------------------------------------------
+
+
+def replace_fob(user_id):
+
+    global message_list
+    
+    removed = False
+    for i in range(list_of_values.__len__()):
+        if i != 0:
+            sublist = list_of_values[i]
+            # print(sublist)
+            if sublist[id_index] == user_id and int(sublist[fob_count_index]) > 0:
+                list_of_values[1][fob_count_index] = int(list_of_values[1][fob_count_index]) + 1
+                sheet.update_cell(2, fob_count_index + 1, list_of_values[1][fob_count_index])
+
+                sublist[fob_count_index] = int(sublist[fob_count_index]) - 1
+                sheet.update_cell(i + 1, 2, sublist[fob_count_index])
+                if sublist[fob_count_index] == 0:
+                    message_list.append(f"<@{user_id.upper()}> now has no Fobs!" + "\n" +
+                                        f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                                        + ':key:' * int(list_of_values[1][fob_count_index]))
+                elif sublist[fob_count_index] == 1:
+                    message_list.append(f"<@{user_id.upper()}> now has 1 Fob!"
+                                        + ':key:' * int(sublist[fob_count_index]) + "\n" +
+                                        f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                                        + ':key:' * int(list_of_values[1][fob_count_index]))
+                else:
+                    message_list.append(f"<@{user_id.upper()}> now has {sublist[fob_count_index]} Fobs!"
+                                        + ':key:' * int(sublist[fob_count_index]) + "\n" +
+                                        f"@ROOM now has {list_of_values[1][fob_count_index]} Fobs!"
+                                        + ':key:' * int(list_of_values[1][fob_count_index]))
+
+                copy_to_file()
+                return
+
+            elif sublist[id_index] == user_id and int(sublist[fob_count_index]) == 0:
+                message_list.append(f"<@{user_id.upper()}> does not have a Fob, one cannot be Returned!")
+                copy_to_file()
+                return
+            
+    if not removed:
+        sheet.append_row([user_id, 0])
+        list_of_values.append([user_id, 0])
+        message_list.append(f"<@{user_id.upper()}> does not have a Fob, one cannot be Returned!")
+        copy_to_file()
+
 
 # ------------------------------------------------------------------------------
 
@@ -211,11 +319,10 @@ def update_email_list():
     user_list = requests.get("https://slack.com/api/users.list?token=%s" % slack_token).json()['members']
     users_num = len(user_list)
 
+    email_workbook = client.open_by_url(email_workbook_url)
     now = datetime.now()
-
-    email_file = client.open_by_url(
-        "REDACTED")
-    email_sheet = email_file.add_worksheet(title=now.strftime("%B %d, %Y @ %H:%M:%S"), rows=str(users_num+5), cols="20")
+    
+    email_sheet = email_workbook.add_worksheet(title=now.strftime("%B %d, %Y @ %H:%M:%S"), rows=str(users_num+5), cols="20")
 
     email_sheet.update_cell(1, 1, 'Names')
     email_sheet.update_cell(1, 2, 'Emails')
@@ -249,21 +356,24 @@ def mother_ship(**payload):
 
     message_list = []
     send_message = ""
-
-    check = 0
-    transfer = 0
-    add = 0
-    remove = 0
-    _help = 0
-    copy_for_oversight = False
-
     message_text = ""
     sender_id = ""
     message_give_id = ""
     message_take_id = ""
 
+    copy_for_oversight = False
+    check = 0
+    transfer = 0
+    add = 0
+    remove = 0
+    borrow = 0
+    replace = 0
+    _help = 0 
+
+    web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection
+
     # -----------------------------------------------------
-    # Get Message Data
+    # Get & Convert Message Data
 
     message = payload['data']
     if "Fob-Bot" in message['text']:
@@ -273,11 +383,16 @@ def mother_ship(**payload):
         print(f"Message received:\n{json.dumps(message, indent=2)}")
         message_text = message['text'].lower()
         sender_id = message['user'].lower()
-        message_text = message_text.replace(' me', f'<@{sender_id.lower()}>')
+        message_text = message_text.replace(' me', f'<@{sender_id.lower()}>')                                                   # Replace instances of " me" with the ID of the sender
+        logging.debug("\n MESSAGE RECEIVED:\n Message: " + message_text + "\n Time: " + str(time.localtime()) + "\n")          # Debug Logging
 
     # -----------------------------------------------------
-    # Get Google Sheet Data
-
+    # Get Google Sheet Data\
+    global scope
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(client_credentials_file, scope)
+    client = gspread.authorize(credentials)
+    sheet = client.open_by_url(fob_workbook_url).sheet1
+    
     list_of_values = sheet.get_all_values()
     print("Database Run")
 
@@ -287,8 +402,8 @@ def mother_ship(**payload):
     if re.match(r'.*(update).*', message_text, re.IGNORECASE) and re.match(r'.*(email).*', message_text, re.IGNORECASE):
         update_email_list()
         web_client = payload['web_client']
-        web_client.chat_postMessage(channel=message['channel'], text="*Fob-Bot* :robot_face:\n\nEmail List Updated in \
-Google Sheet:\n REDACTED")
+        web_client.chat_postMessage(channel=message['channel'], text=f"*Fob-Bot* :robot_face:\n\nEmail List Updated in \
+            Google Sheet:\n {email_workbook_url}")
         return
     if re.match(r'.*(help|hi|hello).*', message_text, re.IGNORECASE):
         _help = 1
@@ -301,6 +416,10 @@ Google Sheet:\n REDACTED")
     if re.match(r'.*(remove).*', message_text, re.IGNORECASE):
         remove = 1
         message_take_id = message_text[message_text.find('@') + 1:message_text.find('>')]
+    if re.match(r'.*(borrow|take).*', message_text, re.IGNORECASE):
+        borrow = 1
+    if re.match(r'.*(return|replace).*', message_text, re.IGNORECASE):
+        replace = 1
     if re.match(r'.*(transfer|give|hand).*', message_text, re.IGNORECASE):
         transfer = 1
         if 'from' in message_text:
@@ -320,6 +439,8 @@ Google Sheet:\n REDACTED")
     if ((" " in message_give_id or not message_give_id.lower().startswith('u')) and (not message_give_id == "")) or \
             ((" " in message_take_id or not message_take_id.lower().startswith('u')) and (not message_take_id == "")):
         check = 0
+        borrow = 0
+        replace = 0
         transfer = 0
         add = 0
         remove = 0
@@ -328,12 +449,20 @@ Google Sheet:\n REDACTED")
     # -----------------------------------------------------
     # Run Functions
 
-    if check + transfer + add + remove > 1:
+    if check + transfer + add + remove + borrow + replace > 1:
         message_list.append("Sorry, I can only understand 1 command at a time. \nPlease send each command individually \
 and wait for my reply. \n Thanks!")
-
+    
     elif check == 1:
         check_fobs()
+
+    elif borrow == 1:
+        borrow_fob(sender_id)
+        copy_for_oversight = True
+    
+    elif replace == 1:
+        replace_fob(sender_id)
+        copy_for_oversight = True
 
     elif transfer == 1:
         take_and_give(message_take_id, message_give_id)
@@ -349,15 +478,16 @@ and wait for my reply. \n Thanks!")
 
     elif _help == 1:
         message_list.append(
-            'Hello! Im Fob-Bot! \nIm here to help the WatLock team keep track of those pesky security fobs. \n\nIf you \
-want to *CHECK* who has fobs, just DM me "Who has fobs" or "Check fobs" \n\n If you want to *TRANSFER* a \
-fob between people, just DM me "Transfer fob from @Giver to @Receiver" or "Transfer from me to @Receiver". \
-\n(Please @ people or use "Me" for proper user recognition). \n\nPlease do tell me when a Fob changes \
-hands so I can inform everyone else on the team. \nThanks! :smile:')
+            f'Hello! <@{sender_id.upper()}> Im Fob-Bot! \nIm here to help the WatLock team keep track of those pesky \
+security fobs. \n\nTo *BORROW* a Fob from the WatLock room, send "Borrow Fob". \n\nTo *RETURN* a Fob, \
+send "Return Fob" \n\nIf you want to *CHECK* who has fobs, just DM me "Who has fobs" or "Check fobs"\
+\n\nIf you want to *TRANSFER* a fob between people, just DM me "Transfer fob from @Giver to @Receiver" \
+or "Transfer from me to @Receiver". \n(Please @ people or use "Me" for proper user recognition). \
+\n\nPlease do tell me when a Fob changes hands so I can inform everyone else on the team. \nThanks! :smile:')
 
     else:
         message_list.append(
-            ':question:\nSorry, I don\'t understand. Please use Keywords *"Check"* and *"Transfer"* in your command \
+            ':question:\nSorry, I don\'t understand. Please use Keywords *"Borrow"*, *"Return*", *"Check"*, or *"Transfer"* in your command \
 messages.\n *Reference* people using @user. \n\nOr, send "Help" for more information about me and my \
 commands.\n')
          
@@ -366,8 +496,9 @@ commands.\n')
             send_message = send_message + '\n' + message_list[i]
         else:
             send_message = message_list[i]
+
     send_message = "*Fob-Bot* :robot_face:\n\n" + send_message
-    web_client = payload['web_client']
+    #web_client = payload['web_client']
     web_client.chat_postMessage(channel=message['channel'], text=send_message)
     print("Return Message:\n" + send_message)
     copy_to_file()
@@ -375,7 +506,7 @@ commands.\n')
     # -----------------------------------------------------
     # Send Notification to Admin that the list has been updated
     send_message = ""
-    if admin_updates and copy_for_oversight and sender_id != 'ufzh0al3g':
+    if admin_updates and copy_for_oversight and sender_id != admin_id:
         for i in range(message_list.__len__()):
             if i != 0:
                 send_message = send_message + '\n' + message_list[i]
@@ -383,13 +514,18 @@ commands.\n')
                 send_message = message_list[i]
         send_message = f"*Fob-Bot* :robot_face: \n\n{admin_name}, Someone has updated the Fob List. Here is the update!\
 \n\n" + send_message
-        web_client = payload['web_client']
+        #web_client = payload['web_client']
         web_client.chat_postMessage(channel=admin_channel, text=send_message)
         copy_to_file()
 
 # #########################__MAIN_PROGRAM_END__################################
 # #############################################################################
 
+#Update Local Fob List
+list_of_values = sheet.get_all_values()
+copy_to_file()
+
 
 # Start Client Reading Messages
+rtm_client.auto_reconnect = True
 rtm_client.start()
