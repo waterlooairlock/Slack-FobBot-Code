@@ -414,8 +414,11 @@ def mother_ship(**payload):
     if re.match(r'.*(update).*', message_text, re.IGNORECASE) and re.match(r'.*(email).*', message_text, re.IGNORECASE):        # Update the Email list and reply with the link to the email list
         update_email_list()
         web_client = payload['web_client']
-        web_client.chat_postMessage(channel=message['channel'], text=f"*Fob-Bot* :robot_face:\n\nEmail List Updated in \
-            Google Sheet:\n {email_workbook_url}")
+        web_client.chat_postMessage(channel=message['channel'], text=   f"*Fob-Bot* :robot_face:\n\
+                                                                        \n\
+                                                                        Email List Updated in Google Sheet:\n\
+                                                                        {email_workbook_url}"
+                                    )
         return
 
     if re.match(r'.*(help|hi|hello).*', message_text, re.IGNORECASE):                       # Greeting and explaination reply
