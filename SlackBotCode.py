@@ -357,14 +357,12 @@ def update_email_list():
 # #########################__MAIN_PROGRAM_START__##############################
 
 @slack.RTMClient.run_on(event='message')            # Event Based Trigger
-def refresh_web_client():
-    web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection (TESTING to remove crash issues)
-
-@slack.RTMClient.run_on(event='message')            # Event Based Trigger
 def mother_ship(**payload):
     
     global list_of_values
     global message_list
+    global credentials
+    global scope
 
     message_list = []
     send_message = ""
@@ -382,7 +380,8 @@ def mother_ship(**payload):
     replace = 0
     _help = 0 
 
-    #web_client = slack.WebClient(token=slack_token)                 # Re-establish messaging client connection (TESTING to remove crash issues)
+    web_client = slack.WebClient(token=slack_token)                                                 # Re-establish messaging client connection
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(client_credentials_file, scope)  # Re-establish Google-Sheets API connection
 
     # -----------------------------------------------------
     # Get & Convert Message Data
